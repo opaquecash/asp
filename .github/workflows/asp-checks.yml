@@ -1,0 +1,29 @@
+name: ASP checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # The indexer (scripts/indexer.ts) posts setAspRoot from a funded aspAuthority key
+      # against live testnets, so it is never run in CI — only the pure logic is tested.

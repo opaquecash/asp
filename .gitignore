@@ -1,0 +1,8 @@
+node_modules/
+.env
+*.log
+dist/
+coverage/
+
+# Local association-set state + published manifests (runtime data, not source).
+data/
