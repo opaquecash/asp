@@ -72,20 +72,33 @@ The signing key **must be the pool's ASP authority** (`aspAuthority` on EVM, `as
 on Solana). Without IPFS configured, manifests are still written under `data/sets/` — the CID
 is simply absent, which is fine because the set self-authenticates against the on-chain root.
 
-## How a withdrawer uses the published set
+## How a withdrawer gets the set
 
-The opening for each root is written to `data/sets/<poolId>/<root>.json` (and `latest.json`),
-and pinned to IPFS when configured:
+A withdrawal needs the ordered approved labels (`aspLeaves`) and the withdrawer's position
+in them (`aspIndex`) for `@opaquecash/privacy-pool`'s `buildWithdrawalWitness`. Both are
+resolved **self-authenticatingly** — verified by recomputing the Merkle root and checking it
+equals the on-chain `aspRoot`, so the source is never trusted. Two decentralized paths
+(`@opaquecash/privacy-pool` ≥ 0.3.0):
 
-```json
-{ "poolId": "evm:11155111", "root": "…", "version": 3, "levels": 20,
-  "labels": ["…", "…"], "algo": "poseidon-bn254", "generatedAt": "…" }
-```
+1. **Chain-native (no dependency on this service).** Under the v1 `approve-all` policy the set
+   is just the deposit labels ordered by `leafIndex`, so a client rebuilds it straight from
+   on-chain `Deposit` events with `reconstructAspSetFromDeposits(...)`. The withdraw client
+   already scans `Deposit` events for the state tree, so this is free and depends only on the
+   chain — the most decentralized path.
 
-A withdrawer fetches it, finds their `label`'s position in `labels` (their `aspIndex`), and
-passes `aspLeaves: labels` + `aspIndex` into `@opaquecash/privacy-pool`'s
-`buildWithdrawalWitness`. The resulting proof only verifies if the rebuilt tree hashes to the
-on-chain `aspRoot` — which is exactly the self-authentication guarantee.
+2. **Published manifest (for selective policies, via ENS → IPFS).** The opening for each root
+   is written to `data/sets/<poolId>/<root>.json` (and `latest.json`) and pinned to IPFS:
+
+   ```json
+   { "poolId": "evm:11155111", "root": "…", "version": 3, "levels": 20,
+     "labels": ["…", "…"], "algo": "poseidon-bn254", "generatedAt": "…" }
+   ```
+
+   When `ASP_ENS_NAME` is set, the service also points an ENS text record
+   (`com.opaque.aspset = ipfs://<cid>`) at the latest manifest, so clients discover it through
+   decentralized naming: `resolveAspSetViaEns(name, transports)` → `aspSetFromManifest(...)`
+   (which re-verifies against the on-chain root). ENS gives censorship-resistant *discovery*;
+   IPFS gives the content; self-authentication gives integrity — this service is never trust.
 
 ## Development
 

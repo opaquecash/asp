@@ -15,6 +15,7 @@
 
 import {
   dataDir,
+  ensConfig,
   evmConfig,
   intervalMs,
   selectedChains,
@@ -24,6 +25,7 @@ import { buildEngineCrypto, runPoolTick, type EngineDeps } from "../src/engine.j
 import { FileStore } from "../src/store.js";
 import { approveAll } from "../src/policy.js";
 import { pinnerFromEnv } from "../src/publish.js";
+import { createEnsPointer } from "../src/ens.js";
 import { createEvmAdapter } from "../src/chains/evm.js";
 import { createSolanaAdapter } from "../src/chains/solana.js";
 import type { ChainAdapter } from "../src/types.js";
@@ -50,7 +52,11 @@ async function main(): Promise<void> {
   if (chains.solana) adapters.push(createSolanaAdapter(solanaConfig(), log));
   if (adapters.length === 0) throw new Error("No chains selected — set ASP_CHAINS (e.g. evm,solana)");
 
-  log(`ASP starting: policy=${deps.policy.name} pinner=${deps.pinner.name} pools=${adapters.map((a) => a.poolId).join(",")} ${once ? "(once)" : `every ${intervalMs()}ms`}`);
+  // Optional ENS pointer: publish the latest manifest CID for one pool as a text record.
+  const ensCfg = ensConfig();
+  const ensPointer = ensCfg ? createEnsPointer(ensCfg) : null;
+
+  log(`ASP starting: policy=${deps.policy.name} pinner=${deps.pinner.name} pools=${adapters.map((a) => a.poolId).join(",")}${ensPointer ? ` ens=${ensPointer.name}->${ensPointer.poolId}` : ""} ${once ? "(once)" : `every ${intervalMs()}ms`}`);
 
   const tick = async (): Promise<void> => {
     for (const adapter of adapters) {
@@ -59,6 +65,15 @@ async function main(): Promise<void> {
         log(
           `[${r.poolId}] scanned=${r.scanned} approved=${r.approved} rejected=${r.rejected} deferred=${r.deferred} set=${r.setSize} ${r.posted ? `POSTED root=${r.root} cid=${r.cid ?? "none"} tx=${r.txId}` : "no change"}`,
         );
+        // Update the ENS pointer for the tracked pool once a new root + CID are published.
+        if (ensPointer && r.poolId === ensPointer.poolId && r.rootChanged && r.cid) {
+          try {
+            const tx = await ensPointer.publishCid(r.cid);
+            log(`[${r.poolId}] ENS ${ensPointer.name} ${ensPointer.textKey}=ipfs://${r.cid} tx=${tx}`);
+          } catch (err) {
+            log(`[${r.poolId}] ENS update failed: ${(err as Error).message ?? err}`);
+          }
+        }
       } catch (err) {
         log(`[${adapter.poolId}] ERROR: ${(err as Error).message ?? err}`);
       }

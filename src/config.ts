@@ -80,3 +80,31 @@ export function solanaConfig(): SolanaConfig {
     keypair: Keypair.fromSecretKey(Uint8Array.from(secret)),
   };
 }
+
+// ── ENS pointer (optional) ───────────────────────────────────────────────────
+export interface EnsConfig {
+  name: string;
+  resolver: string;
+  textKey: string;
+  poolId: string;
+  rpcUrl: string;
+  privateKey: string;
+}
+
+/**
+ * ENS pointer config, or null when `ASP_ENS_NAME` is unset (pointer disabled). Reuses the
+ * Sepolia RPC + key (ENS lives on Ethereum); the key must control the name on the resolver.
+ * One name tracks one pool's manifest (default the EVM pool).
+ */
+export function ensConfig(): EnsConfig | null {
+  const name = process.env.ASP_ENS_NAME;
+  if (!name) return null;
+  return {
+    name,
+    resolver: env("ASP_ENS_RESOLVER"),
+    textKey: process.env.ASP_ENS_TEXT_KEY || "com.opaque.aspset",
+    poolId: process.env.ASP_ENS_POOL_ID || `evm:${intEnv("ASP_EVM_CHAIN_ID", 11155111)}`,
+    rpcUrl: env("SEPOLIA_RPC_URL"),
+    privateKey: env("SEPOLIA_PRIVATE_KEY"),
+  };
+}
