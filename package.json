@@ -18,7 +18,7 @@
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
     "@opaquecash/deployments": "^0.2.2",
-    "@opaquecash/privacy-pool": "^0.2.0",
+    "@opaquecash/privacy-pool": "^0.3.0",
     "@solana/web3.js": "^1.95.4",
     "dotenv": "^16.4.5",
     "ethers": "^6.13.4"
