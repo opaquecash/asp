@@ -32,6 +32,13 @@ export type Screen = "approve" | "reject" | "defer";
 export interface Policy {
   readonly name: string;
   screen(deposit: Deposit): Screen | Promise<Screen>;
+  /**
+   * When true, the policy approves every deposit, so the curated set must be a gapless
+   * prefix of the deposit stream. The engine then refuses to post a root whose leafIndices
+   * are not contiguous (a hole means a deposit was dropped upstream — OPQ-005). Policies
+   * that legitimately reject/defer some deposits leave this unset (holes are expected).
+   */
+  readonly requiresContiguousSet?: boolean;
 }
 
 /**

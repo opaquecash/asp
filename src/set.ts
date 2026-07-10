@@ -51,6 +51,18 @@ export class AssociationSet {
     return this.entries.length;
   }
 
+  /**
+   * True iff the approved leafIndices are the gapless prefix `0, 1, …, size-1`.
+   *
+   * Withdrawers reconstruct the association set by hashing a chain-ordered *prefix* of the
+   * deposit stream, so under an approve-all policy the set MUST be exactly that prefix — a
+   * hole (a dropped/skipped deposit) makes the posted root non-reconstructable by anyone and
+   * locks the whole pool (OPQ-005). The engine asserts this before posting under approve-all.
+   */
+  isContiguousPrefix(): boolean {
+    return this.entries.every((e, i) => e.leafIndex === i);
+  }
+
   /** The ordered labels — the association tree's leaves. */
   labels(): bigint[] {
     return this.entries.map((e) => e.label);

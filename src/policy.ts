@@ -12,6 +12,7 @@ import type { Deposit, Policy, Screen } from "./types.js";
 /** Approve every deposit. The pipeline-exercising default for testnet. */
 export const approveAll: Policy = {
   name: "approve-all",
+  requiresContiguousSet: true,
   screen(): Screen {
     return "approve";
   },

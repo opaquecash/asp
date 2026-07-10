@@ -113,6 +113,21 @@ export async function runPoolTick(adapter: ChainAdapter, deps: EngineDeps): Prom
 
   if (set.size() > 0 && computed !== onchain) {
     rootChanged = true;
+
+    // Backstop for OPQ-005: under an approve-all policy the curated set must be a gapless
+    // prefix of the deposit stream, or withdrawers' prefix-only reconstruction returns null
+    // and the pool locks. A hole here means a deposit was dropped upstream (e.g. a signature
+    // whose transaction never decoded). Refuse to post the poisoned root and throw so the
+    // operator is alerted and no cursor/set state that hides the gap is persisted; the tick
+    // is retried, and a genuinely lost deposit requires manual repair.
+    if (deps.policy.requiresContiguousSet && !set.isContiguousPrefix()) {
+      throw new Error(
+        `[${adapter.poolId}] refusing to post a gapped association-set root under policy ` +
+          `"${deps.policy.name}": approved leafIndices are not a contiguous prefix ` +
+          `(size=${set.size()}); a deposit was dropped upstream and must be repaired`,
+      );
+    }
+
     const version = (state.published?.version ?? 0) + 1;
 
     // 4a. Publish the opening FIRST so the root is never ahead of its fetchable list.

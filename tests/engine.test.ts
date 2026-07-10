@@ -97,6 +97,36 @@ describe("runPoolTick", () => {
     expect(r.setSize).toBe(1);
   });
 
+  it("refuses to post a gapped root under approve-all, posting nothing (OPQ-005)", async () => {
+    const store = new MemoryStore();
+    // A hole at leafIndex 1 — a deposit was dropped upstream (e.g. an undecodable signature).
+    const adapter = new FakeAdapter("solana:test", [[dep(0), dep(2)]]);
+    const pub = stubPublish();
+
+    await expect(runPoolTick(adapter, deps(store, approveAll, pub.fn))).rejects.toThrow(
+      /gapped association-set root/i,
+    );
+
+    // The poisoned root never reaches the chain and no opening is published.
+    expect(adapter.postedRoots).toHaveLength(0);
+    expect(pub.calls).toHaveLength(0);
+  });
+
+  it("allows a gapped set under a curating (rejecting) policy — holes are expected there", async () => {
+    const store = new MemoryStore();
+    const adapter = new FakeAdapter("evm:test", [[dep(0), dep(1), dep(2)]]);
+    const pub = stubPublish();
+    // Approve leafIndex 0 and 2, reject 1 → the set is legitimately {0, 2}.
+    const policy = allowlistPolicy([dep(0).label, dep(2).label]);
+
+    const r = await runPoolTick(adapter, deps(store, policy, pub.fn));
+
+    expect(r.approved).toBe(2);
+    expect(r.rejected).toBe(1);
+    expect(r.posted).toBe(true); // a curating policy carries no contiguity requirement
+    expect(adapter.postedRoots).toHaveLength(1);
+  });
+
   it("defers deposits and re-screens them on a later tick", async () => {
     const store = new MemoryStore();
     const adapter = new FakeAdapter("evm:test", [[dep(0)], []]);

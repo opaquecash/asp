@@ -47,6 +47,33 @@ describe("AssociationSet", () => {
     expect(set.root(crypto)).toBe(crypto.zeros[20]);
   });
 
+  it("detects a contiguous 0..N-1 prefix vs a gapped set (OPQ-005 backstop)", () => {
+    expect(new AssociationSet().isContiguousPrefix()).toBe(true); // empty is a trivial prefix
+    expect(
+      new AssociationSet([
+        { label: 111n, leafIndex: 0 },
+        { label: 222n, leafIndex: 1 },
+        { label: 333n, leafIndex: 2 },
+      ]).isContiguousPrefix(),
+    ).toBe(true);
+
+    // A hole at leafIndex 1 (dropped deposit) is not a valid prefix.
+    expect(
+      new AssociationSet([
+        { label: 111n, leafIndex: 0 },
+        { label: 333n, leafIndex: 2 },
+      ]).isContiguousPrefix(),
+    ).toBe(false);
+
+    // A set that does not start at leafIndex 0 is not a prefix either (unreconstructable).
+    expect(
+      new AssociationSet([
+        { label: 222n, leafIndex: 1 },
+        { label: 333n, leafIndex: 2 },
+      ]).isContiguousPrefix(),
+    ).toBe(false);
+  });
+
   it("round-trips through JSON", () => {
     const set = new AssociationSet([
       { label: 5n, leafIndex: 0 },
