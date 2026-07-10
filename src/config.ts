@@ -92,9 +92,14 @@ export interface EnsConfig {
 }
 
 /**
- * ENS pointer config, or null when `ASP_ENS_NAME` is unset (pointer disabled). Reuses the
- * Sepolia RPC + key (ENS lives on Ethereum); the key must control the name on the resolver.
+ * ENS pointer config, or null when `ASP_ENS_NAME` is unset (pointer disabled). ENS lives on
+ * Ethereum, so it reuses the Sepolia RPC; the key must control the name on the resolver.
  * One name tracks one pool's manifest (default the EVM pool).
+ *
+ * The ENS pointer key SHOULD be a separate, minimally-funded key from the ASP root-publishing
+ * authority — set `ASP_ENS_PRIVATE_KEY` to separate the duties so a compromise of one does not
+ * grant the other (OPQ-035). It falls back to `SEPOLIA_PRIVATE_KEY` only for backward
+ * compatibility; production deployments should set the dedicated key. See SECURITY.md.
  */
 export function ensConfig(): EnsConfig | null {
   const name = process.env.ASP_ENS_NAME;
@@ -105,6 +110,6 @@ export function ensConfig(): EnsConfig | null {
     textKey: process.env.ASP_ENS_TEXT_KEY || "com.opaque.aspset",
     poolId: process.env.ASP_ENS_POOL_ID || `evm:${intEnv("ASP_EVM_CHAIN_ID", 11155111)}`,
     rpcUrl: env("SEPOLIA_RPC_URL"),
-    privateKey: env("SEPOLIA_PRIVATE_KEY"),
+    privateKey: process.env.ASP_ENS_PRIVATE_KEY || env("SEPOLIA_PRIVATE_KEY"),
   };
 }
