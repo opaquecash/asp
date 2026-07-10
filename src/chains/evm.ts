@@ -9,11 +9,14 @@
 
 import { ethers } from "ethers";
 import { requireEvmDeployment } from "@opaquecash/deployments";
+import { buildPoolCrypto, type PoolCrypto } from "@opaquecash/privacy-pool";
 import type { ChainAdapter, Deposit } from "../types.js";
 import type { EvmConfig } from "../config.js";
+import { assertValidDeposits } from "../validate.js";
 
 const POOL_ABI = [
   "event Deposit(bytes32 indexed commitment, uint256 label, uint256 value, uint32 leafIndex)",
+  "function scope() view returns (uint256)",
   "function aspRoot() view returns (uint256)",
   "function setAspRoot(uint256 newRoot)",
 ];
@@ -28,6 +31,16 @@ export function createEvmAdapter(cfg: EvmConfig): ChainAdapter {
   // (the pool shipped after the UAB stack). Override with ASP_EVM_FROM_BLOCK to scan less.
   const defaultFrom = Number(deployment.uabFromBlock);
   const fromBlock = cfg.fromBlock ?? defaultFrom;
+
+  // Pool scope is immutable; the Poseidon crypto is reused. Both are lazily loaded once so
+  // every deposit's RPC-reported label can be checked against Poseidon(scope, leafIndex).
+  let cryptoPromise: Promise<PoolCrypto> | null = null;
+  let scopeCache: bigint | null = null;
+  const getCrypto = () => (cryptoPromise ??= buildPoolCrypto());
+  async function getScope(): Promise<bigint> {
+    if (scopeCache === null) scopeCache = BigInt(await pool.scope());
+    return scopeCache;
+  }
 
   return {
     poolId: `evm:${cfg.chainId}`,
@@ -54,6 +67,8 @@ export function createEvmAdapter(cfg: EvmConfig): ChainAdapter {
           });
         }
       }
+      // Never trust the RPC's labels/ordering: each must be the on-chain Poseidon(scope, idx).
+      assertValidDeposits(await getCrypto(), await getScope(), deposits, `evm:${cfg.chainId}`);
       return { deposits, cursor: String(head) };
     },
 

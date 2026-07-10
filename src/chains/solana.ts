@@ -12,9 +12,11 @@ import { createRequire } from "node:module";
 import { Connection, PublicKey } from "@solana/web3.js";
 import anchorPkg from "@coral-xyz/anchor";
 import { requireSolanaProgramIds } from "@opaquecash/deployments";
+import { buildPoolCrypto, type PoolCrypto } from "@opaquecash/privacy-pool";
 import { bigIntToBytesBE32, bytesBE32ToBigInt } from "../field.js";
 import type { ChainAdapter, Deposit } from "../types.js";
 import type { SolanaConfig } from "../config.js";
+import { assertValidDeposits } from "../validate.js";
 
 const { AnchorProvider, Program, Wallet, EventParser } = anchorPkg;
 const require = createRequire(import.meta.url);
@@ -43,6 +45,19 @@ export function createSolanaAdapter(cfg: SolanaConfig, log: (msg: string) => voi
   const program = new Program(idl, provider);
   const poolPda = PublicKey.findProgramAddressSync([Buffer.from("pool")], programId)[0];
   const parser = new EventParser(programId, program.coder);
+
+  // Pool scope is immutable; the Poseidon crypto is reused. Both lazily loaded once so every
+  // deposit's RPC-reported label can be checked against Poseidon(scope, leafIndex).
+  let cryptoPromise: Promise<PoolCrypto> | null = null;
+  let scopeCache: bigint | null = null;
+  const getCrypto = () => (cryptoPromise ??= buildPoolCrypto());
+  async function getScope(): Promise<bigint> {
+    if (scopeCache === null) {
+      const pool = await (program.account as any).pool.fetch(poolPda);
+      scopeCache = bytesBE32ToBigInt(pool.scope as number[]);
+    }
+    return scopeCache;
+  }
 
   /** Fetch a finalized transaction, retrying transient nulls; null only after all attempts miss. */
   async function getTransactionWithRetry(signature: string) {
@@ -111,6 +126,8 @@ export function createSolanaAdapter(cfg: SolanaConfig, log: (msg: string) => voi
         }
         newCursor = s.signature;
       }
+      // Never trust the RPC's labels/ordering: each must be the on-chain Poseidon(scope, idx).
+      assertValidDeposits(await getCrypto(), await getScope(), deposits, `solana:${cfg.cluster}`);
       return { deposits, cursor: newCursor };
     },
 
